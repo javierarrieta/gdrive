@@ -5,6 +5,7 @@ use crate::files;
 use crate::files::copy;
 use crate::files::list;
 use crate::files::mkdir;
+use crate::files::rename;
 use crate::hub::Hub;
 use std::error;
 use std::fmt::Display;
@@ -54,7 +55,7 @@ pub async fn copy_folder_inner(
 ) -> Result<(), Error> {
     let list_children_config: list::ListFilesConfig = list::ListFilesConfig {
         query: list::ListQuery::FilesInFolder {
-            folder_id: config.to_folder_id.clone(),
+            folder_id: config.src_folder_id.clone(),
         },
         order_by: list::ListSortOrder::FolderModifiedName,
         max_files: 1000,
@@ -90,9 +91,15 @@ pub async fn copy_folder_inner(
                 file_id: child.id.ok_or(Error::FileWithoutId)?,
                 to_folder_id: config.to_folder_id.clone(),
             };
-            copy::copy_file(hub, delegate_config.clone(), &copy_config)
+            let new_file = copy::copy_file(hub, delegate_config.clone(), &copy_config)
                 .await
                 .map_err(Error::Copy)?;
+
+            let rename_config = rename::Config {
+                file_id: new_file.id.ok_or(Error::FileWithoutId)?,
+                name: child.name.ok_or(Error::FileWithoutName)?,
+            };
+            rename::rename(rename_config).await.map_err(Error::RenameError)?;
         }
     }
 
@@ -133,6 +140,9 @@ impl Display for Error {
             Error::CopyFile(err) => {
                 write!(f, "Faild copying file: {}", err)
             }
+            Error::RenameError(err) => {
+                write!(f, "Faild renaming file: {}", err)
+            }
         }
     }
 }
@@ -150,6 +160,7 @@ pub enum Error {
     FileWithoutName,
     MKDirError(google_drive3::Error),
     CopyFile(google_drive3::Error),
+    RenameError(rename::Error),
 }
 
 impl error::Error for Error {}
