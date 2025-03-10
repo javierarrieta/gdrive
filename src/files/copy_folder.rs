@@ -53,6 +53,22 @@ pub async fn copy_folder_inner(
     delegate_config: UploadDelegateConfig,
     config: &CopyFolderConfig,
 ) -> Result<(), Error> {
+
+    let src_folder = files::info::get_file(&hub, &config.src_folder_id)
+        .await
+        .map_err(Error::GetDestinationFolder)?;
+
+    let mkdir_config = mkdir::Config {
+        id: None,
+        name: src_folder.name.ok_or(Error::FileWithoutId)?.clone(),
+        parents: Some(vec![config.to_folder_id.clone()]),
+        print_only_id: true,
+    };
+
+    let new_folder = mkdir::create_directory(hub, &mkdir_config, delegate_config.clone())
+        .await
+        .map_err(Error::MKDirError)?;
+    
     let list_children_config: list::ListFilesConfig = list::ListFilesConfig {
         query: list::ListQuery::FilesInFolder {
             folder_id: config.src_folder_id.clone(),
@@ -65,20 +81,13 @@ pub async fn copy_folder_inner(
         .await
         .map_err(Error::ListFiles)?;
 
+    let new_folder_id: String = new_folder.id.ok_or(Error::FileWithoutId)?;
+
     for child in children {
         if drive_file::is_directory(&child) {
-            let mkdir_config = mkdir::Config {
-                id: None,
-                name: child.name.ok_or(Error::FileWithoutId)?.clone(),
-                parents: Some(vec![config.to_folder_id.clone()]),
-                print_only_id: true,
-            };
-            let new_folder = mkdir::create_directory(hub, &mkdir_config, delegate_config.clone())
-                .await
-                .map_err(Error::MKDirError)?;
             let new_folder_config = CopyFolderConfig {
                 src_folder_id: child.id.ok_or(Error::FileWithoutId)?,
-                to_folder_id: new_folder.id.ok_or(Error::FileWithoutId)?,
+                to_folder_id: new_folder_id.clone(),
             };
             Box::pin(copy_folder_inner(
                 hub,
@@ -89,7 +98,7 @@ pub async fn copy_folder_inner(
         } else {
             let copy_config = copy::CopyConfig {
                 file_id: child.id.ok_or(Error::FileWithoutId)?,
-                to_folder_id: config.to_folder_id.clone(),
+                to_folder_id: new_folder_id.clone(),
             };
             let new_file = copy::copy_file(hub, delegate_config.clone(), &copy_config)
                 .await
