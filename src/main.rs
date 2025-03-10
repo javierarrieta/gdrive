@@ -290,6 +290,15 @@ enum FileCommand {
         folder_id: String,
     },
 
+    /// Copy folder
+    CopyFolder {
+        /// Id of the folder to copy
+        src_folder_id: String,
+
+        /// Id of the folder to copy to
+        to_folder_id: String,
+    },
+
     /// Import file as a google document/spreadsheet/presentation.
     /// Example of file types that can be imported: doc, docx, odt, pdf, html, xls, xlsx, csv, ods, ppt, pptx, odp
     Import {
@@ -618,6 +627,15 @@ async fn main() {
                     files::copy(files::copy::Config {
                         file_id,
                         to_folder_id: folder_id,
+                    })
+                    .await
+                    .unwrap_or_else(handle_error)
+                }
+
+                FileCommand::CopyFolder { src_folder_id, to_folder_id } => {
+                    files::copy_folder(files::copy_folder::Config {
+                        src_folder_id,
+                        to_folder_id,
                     })
                     .await
                     .unwrap_or_else(handle_error)
